@@ -10,6 +10,8 @@ from skimage.morphology import dilation, disk
 import cv2
 import pickle
 
+from skimage import img_as_ubyte
+
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -79,6 +81,8 @@ def adjusting_brightness(image, a = 1.1, b = 0):
     return cv2.convertScaleAbs(image, alpha=a, beta=b)
 
 def normalize_image(image, image_colored, rescale_param = 0.5):
+    image = image.copy()
+    image_colored = image_colored.copy()
     image_scaled = rescale(image, rescale_param)
     edges = canny(image_scaled)
     
@@ -87,7 +91,6 @@ def normalize_image(image, image_colored, rescale_param = 0.5):
     
     edges = (edges).astype(np.uint8)
     img, ext_contours, hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-#     show(img)
     contour = max(ext_contours, key=cv2.contourArea)    
     contour = contour.squeeze()
     
@@ -96,32 +99,31 @@ def normalize_image(image, image_colored, rescale_param = 0.5):
     corners = (perspective.order_points(corners))
     corners = corners/rescale_param
 
-#     plt.figure(figsize = (4, 4), dpi = 180)
-#     plt.imshow(image, cmap = 'gray')
-#     for i in range(len(corners)):
-#         plt.scatter(corners[i][0], corners[i][1], c = 'r', s = 0.4)
-#     plt.axis('off')
-    
     size_square = min(image_scaled.shape)
     tform = ProjectiveTransform()
     tform.estimate(np.array([[0,0], [1020,0], [1020,720], [0, 720]]), corners)
     image_warped = warp(image_colored, tform)[:720,:1020]
 
-    data = image_warped.astype('float64') / np.max(image_warped)
-    data = 255 * data
-    img = data.astype('uint8')
+    img = img_as_ubyte(image_warped)
     img = adjusting_brightness(img[30:-5, 15:-15], a = 1.7, b = 3)
     return img, tform
 
 def pipeline(original):
+    original = original.copy()
     def middle(x, y):
         return ((x[0]+y[0])/2, (x[1]+y[1])/2)
+    
     try:
         image_redone, tform = normalize_image(cv2.cvtColor(original, cv2.COLOR_RGB2GRAY),
                                    original,
                                    rescale_param = 0.6)
     except:
         return None
+    
+    if type(image_redone) == type(None):
+        return None
+    
+    
     result = image_redone.copy()
     
     median_filtered = scipy.ndimage.median_filter(cv2.cvtColor(image_redone, cv2.COLOR_RGB2GRAY ), size=3)
@@ -140,17 +142,18 @@ def pipeline(original):
 
     (cnts, _) = contours.sort_contours(ext_contours)
     cnts = [cnt[:, 0] for cnt in cnts]
-    pixelsPerMetric = None
-
-    
+    pixelsPerMetric = 53/image_redone.shape[0]
+    result = np.zeros(image_redone.shape)
+    boxes = []
+    dists = []
     for c in cnts:
-        if cv2.contourArea(c) < 200:
+        if cv2.contourArea(c) < 100:
             continue
 
         box = cv2.boxPoints(cv2.minAreaRect(c)).astype('int32')
+        box = box + np.array([15,30]) # the same KOSTYL as before
         box = perspective.order_points(box).astype('int32')
-        cv2.drawContours(result, [box], -1, (255, 0, 116), 2)
-
+       
         top_left, top_right, bottom_right, bottom_left = box
 
         top_x, top_y = middle(top_left, top_right)
@@ -161,25 +164,32 @@ def pipeline(original):
         distance_1 = dist.euclidean((top_x, top_y), (bottom_x, bottom_y))
         distance_2 = dist.euclidean((left_x, left_y), (right_x, right_y))
 
-        dimA = distance_2 * 0.076
-        dimB = distance_1 * 0.076
-
-
-        cv2.circle(result, (int(top_x), int(top_y)), 5, (255, 0, 0), -1)
-        cv2.putText(result, "{:.1f} cm".format(dimA),
-            (int(top_x - 10), int(top_y - 10)), 0, 0.65, (255, 0, 0), 2)
-
-        cv2.circle(result, (int(right_x), int(right_y)), 5, (255, 0, 0), -1)
-        cv2.putText(result, "{:.1f} cm".format(dimB),
-            (int(right_x + 5), int(right_y)), 0, 0.65, (255, 0, 0), 2)
+        dimA = distance_2 * pixelsPerMetric
+        dimB = distance_1 * pixelsPerMetric
+        dists.append((dimA, dimB))
         
-    result = np.pad(result, ((30,5), (15, 15), (0,0)), mode='constant') #pading is the same KOSTYL as before
-    result = warp(result, tform.inverse, output_shape=original.shape)
-    result = result.astype('uint8')
-    mask = np.nonzero(result[:,:,0])
+        box = tform.__call__(box)
+        boxes.append(box.astype('int32'))
 
     # render borders on original image 
-    a = original.copy()
-    a[mask] = [200, 0, 0]
-    
-    return a
+    for box, dst in zip(boxes, dists):
+        cv2.drawContours(original, [box], -1, (255, 0, 116), 2)
+        top_left, top_right, bottom_right, bottom_left = box
+
+        top_x, top_y = middle(top_left, top_right)
+        bottom_x, bottom_y = middle(bottom_left, bottom_right)
+        left_x, left_y = middle(top_left, bottom_left)
+        right_x, right_y = middle(top_right, bottom_right)
+
+        dimA = dst[0]
+        dimB = dst[1]
+
+        cv2.circle(original, (int(top_x), int(top_y)), 5, (255, 0, 0), -1)
+        cv2.circle(original, (int(right_x), int(right_y)), 5, (255, 0, 0), -1)
+        
+        cv2.putText(original, "{:.1f}cm".format(dimA),
+            (int(top_x - 10), int(top_y - 10)), 0, 0.65, (255, 255, 0), 2)
+        cv2.putText(original, "{:.1f}cm".format(dimB),
+            (int(right_x + 5), int(right_y)), 0, 0.65, (255, 255, 0), 2)
+        
+    return original
