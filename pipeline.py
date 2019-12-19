@@ -19,6 +19,7 @@ from IPython import display
 from scipy.ndimage import distance_transform_edt
 
 
+
 def normalize_image(image, image_colored, rescale_param = 0.5):
     image_scaled = rescale(image, rescale_param)
     edges = canny(image_scaled)
@@ -44,7 +45,7 @@ def normalize_image(image, image_colored, rescale_param = 0.5):
     data = image_warped.astype('float64') / np.max(image_warped)
     data = 255 * data
     img = data.astype('uint8')
-    img = adjusting_brightness(img[30:-5, 15:-15], a = 1.5, b = 3) #notice that slice is a KOSTYL here
+    img = adjusting_brightness(img[30:-5, 15:-15], a = 1.5, b = 3) # notice that slice is a KOSTYL here
     return img, tform
 
 def pipeline(original):
@@ -72,14 +73,16 @@ def pipeline(original):
     pixelsPerMetric = None
 
     result = np.zeros(image_redone.shape)
+    boxes = []
+    dists = []
     for c in cnts:
         if cv2.contourArea(c) < 100:
             continue
 
         box = cv2.boxPoints(cv2.minAreaRect(c)).astype('int32')
+        box = box + np.array([15,30]) # the same KOSTYL as before
         box = perspective.order_points(box).astype('int32')
-        cv2.drawContours(result, [box], -1, (255, 0, 116), 2)
-
+       
         top_left, top_right, bottom_right, bottom_left = box
 
         top_x, top_y = middle(top_left, top_right)
@@ -92,22 +95,37 @@ def pipeline(original):
 
         dimA = distance_2 * 0.076
         dimB = distance_1 * 0.076
-
-
-        cv2.circle(result, (int(top_x), int(top_y)), 5, (255, 0, 0), -1)
-        cv2.putText(result, "{:.1f} cm".format(dimA),
-            (int(top_x - 10), int(top_y - 10)), 0, 0.65, (255, 0, 0), 2)
-
-        cv2.circle(result, (int(right_x), int(right_y)), 5, (255, 0, 0), -1)
-        cv2.putText(result, "{:.1f} cm".format(dimB),
-            (int(right_x + 5), int(right_y)), 0, 0.65, (255, 0, 0), 2)
+        dists.append((dimA, dimB))
         
-    result = np.pad(result, ((30,5), (15, 15), (0,0)), mode='constant') #pading is the same KOSTYL as before
-    result = warp(result, tform.inverse, output_shape=original.shape)
-    result = result.astype('uint8')
-    mask = np.nonzero(result[:,:,0])
+        box = tform.__call__(box)
+        boxes.append(box.astype('int32'))
+
+#     result = np.pad(result, ((30,5), (15, 15), (0,0)), mode='constant') #pading is the same KOSTYL as before
+#     result = warp(result, tform.inverse, output_shape=original.shape)
+#     result = result.astype('uint8')
+#     mask = np.nonzero(result[:,:,0])
 
     # render borders on original image 
-    original[mask] = [200, 0, 0]
+    for box, dst in zip(boxes, dists):
+        cv2.drawContours(original, [box], -1, (255, 0, 116), 2)
+        top_left, top_right, bottom_right, bottom_left = box
+
+        top_x, top_y = middle(top_left, top_right)
+        bottom_x, bottom_y = middle(bottom_left, bottom_right)
+        left_x, left_y = middle(top_left, bottom_left)
+        right_x, right_y = middle(top_right, bottom_right)
+
+        dimA = dst[0]
+        dimB = dst[1]
+
+        cv2.circle(original, (int(top_x), int(top_y)), 5, (255, 0, 0), -1)
+        cv2.putText(original, "{:.1f} cm".format(dimA),
+            (int(top_x - 10), int(top_y - 10)), 0, 0.65, (255, 0, 0), 2)
+
+        cv2.circle(original, (int(right_x), int(right_y)), 5, (255, 0, 0), -1)
+        cv2.putText(original, "{:.1f} cm".format(dimB),
+            (int(right_x + 5), int(right_y)), 0, 0.65, (255, 0, 0), 2)
+    
+#     original[mask] = [200, 0, 0]
     
     return original
