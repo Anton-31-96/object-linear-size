@@ -20,7 +20,7 @@ from scipy.ndimage import distance_transform_edt
 
 
 
-def normalize_image(image, image_colored, rescale_param = 0.5):
+def normalize_image(image, image_colored, rescale_param=0.5):
     image_scaled = rescale(image, rescale_param)
     edges = canny(image_scaled)
     
@@ -53,8 +53,8 @@ def pipeline(original):
         return ((x[0]+y[0])/2, (x[1]+y[1])/2)
     
     image_redone, tform = normalize_image(cv2.cvtColor(original, cv2.COLOR_RGB2GRAY),
-                                   original,
-                                   rescale_param=0.5)
+                                          original,
+                                          rescale_param=0.5)
     
     gray = cv2.cvtColor(image_redone,
                          cv2.COLOR_RGB2GRAY)

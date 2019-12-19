@@ -14,24 +14,31 @@ def open_video(path):
     """
     Opens video file at path
     """
+    
     # open video file
     cap = cv2.VideoCapture(path)
-    j = 0
+    j = 0 # j helps to reduce fps on the video
     while(cap.isOpened()):
-        j+=1
-        ret, img = cap.read()
-#         img = rescale(img, 0.4)
-        if j % 10 == 0:
+        
+        if j == 0:
+            ret, img = cap.read()
             img = np.asarray(img, dtype=np.uint8)
+#             img = rescale(img, 0.4)
             try:
                 img = pipeline(img)
             except: 
                 pass
+        elif j > 20:
             j = 0
+        else:
+            j += 1
      
         cv2.imshow('frame', img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+    
+    # Release everything if job is finished
+    cv2.destroyAllWindows()
 
 def open_web_cam():
     """
@@ -51,6 +58,9 @@ def open_web_cam():
         cv2.imshow('frame', img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+    
+    # Release everything if job is finished
+    cv2.destroyAllWindows()
 
 def open_web_ip(path):
     """
@@ -60,11 +70,13 @@ def open_web_ip(path):
              example: "http://192.168.0.103:8080/shot.jpg"
     Returns: None
     """
+    
     while True:
-        img_res = requests.get(path)#
+        img_res = requests.get(path)
         img_arr = np.array(bytearray(img_res.content), dtype = np.uint8)
+#         img_arr = rescale(img_arr, 0.5, multichannel=True)
         img = cv2.imdecode(img_arr,-1)
-                
+        img = rescale(img, 0.5, multichannel=True)
         try:
             img = pipeline(img)
         except: 
@@ -73,6 +85,7 @@ def open_web_ip(path):
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
+            
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", type=str,
