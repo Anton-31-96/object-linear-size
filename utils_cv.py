@@ -77,7 +77,7 @@ def divide_into_boxes(image):
     box_size = int(image.shape[0]/9)
     return [cv2.resize(image[i*box_size:(i+1)*box_size, j*box_size:(j+1)*box_size], (100, 100)) for i in range(9) for j in range(9)]
 
-def adjusting_brightness(image, a = 1.1, b = 0):
+def adjusting_brightness(image, a = 1.7, b = 2):
     return cv2.convertScaleAbs(image, alpha=a, beta=b)
 
 def normalize_image(image, image_colored, rescale_param = 0.5):
@@ -105,7 +105,7 @@ def normalize_image(image, image_colored, rescale_param = 0.5):
     image_warped = warp(image_colored, tform)[:720,:1020]
 
     img = img_as_ubyte(image_warped)
-    img = adjusting_brightness(img[30:-5, 15:-15], a = 1.7, b = 3)
+    img = adjusting_brightness(img[30:-5, 15:-15], a=1.7, b=2)
     return img, tform
 
 def pipeline(original):
@@ -113,15 +113,16 @@ def pipeline(original):
     def middle(x, y):
         return ((x[0]+y[0])/2, (x[1]+y[1])/2)
     
-    try:
-        image_redone, tform = normalize_image(cv2.cvtColor(original, cv2.COLOR_RGB2GRAY),
-                                   original,
-                                   rescale_param = 0.6)
-    except:
-        return None
+#     try:
+    image_redone, tform = normalize_image(cv2.cvtColor(original, cv2.COLOR_RGB2GRAY),
+                               original,
+                               rescale_param = 0.6)
+#     return image_redone
+#     except:
+#         return None
     
-    if type(image_redone) == type(None):
-        return None
+#     if type(image_redone) == type(None):
+#         return None
     
     
     result = image_redone.copy()
@@ -129,7 +130,7 @@ def pipeline(original):
     median_filtered = scipy.ndimage.median_filter(cv2.cvtColor(image_redone, cv2.COLOR_RGB2GRAY ), size=3)
 
     threshold = skimage.filters.threshold_otsu(median_filtered)
-    predicted = np.uint8(median_filtered > 220) * 255
+    predicted = np.uint8(median_filtered > threshold) * 255
     gray = cv2.GaussianBlur(median_filtered, (7, 7), 0)
 
     edged = cv2.Canny(gray, 50, 100)
@@ -147,7 +148,7 @@ def pipeline(original):
     boxes = []
     dists = []
     for c in cnts:
-        if cv2.contourArea(c) < 100:
+        if cv2.contourArea(c) < 1000:
             continue
 
         box = cv2.boxPoints(cv2.minAreaRect(c)).astype('int32')

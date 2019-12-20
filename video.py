@@ -2,10 +2,13 @@ import cv2
 import numpy as np
 import requests
 import argparse
-from pipeline import *
+# from pipeline import *
+from utils_cv import *
 from skimage.transform import rescale 
+from skimage import img_as_ubyte
 
 # url='http://10.16.114.79:8080/shot.jpg'
+# url
 
 class VideoReadingError(Exception):
     pass
@@ -49,7 +52,10 @@ def open_web_cam():
     
     while(cap.isOpened()):
         ret, img = cap.read()
-                
+        
+        img = rescale(img, 0.4, multichannel=True)
+        img = img_as_ubyte(img)
+
         try:
             img = pipeline(img)
         except: 
@@ -76,7 +82,9 @@ def open_web_ip(path):
         img_arr = np.array(bytearray(img_res.content), dtype = np.uint8)
 #         img_arr = rescale(img_arr, 0.5, multichannel=True)
         img = cv2.imdecode(img_arr,-1)
-        img = rescale(img, 0.5, multichannel=True)
+        # img = rescale(img, 0.5, multichannel=True)
+#         img = rescale(img, 0.8, multichannel=True)
+#         img = img_as_ubyte(img)
         try:
             img = pipeline(img)
         except: 
@@ -101,7 +109,7 @@ if __name__ == "__main__":
     elif mode == 'video':
         open_video(args.path)
     elif mode == 'web_ip':
-        args.path ='http://192.168.1.64:8080/shot.jpg'
+#         args.path ='http://192.168.1.64:8080/shot.jpg'
         open_web_ip(args.path)
     else:
         raise VideoReadingError("Wrong mode parameter")
